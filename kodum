@@ -1,0 +1,760 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import tools from "../data/tools.json";
+import { pickTool } from "../lib/router";
+export default function Home() {
+  const [brief, setBrief] = useState("");
+  const [imageMode, setImageMode] = useState<"TEXT" | "REFERENCE">("TEXT");
+const [videoMode, setVideoMode] = useState<"TEXT" | "START_END">("TEXT");
+const [editMode, setEditMode] = useState<"IMAGE_EDIT" | "VIDEO_EDIT" | "UPSCALE">("IMAGE_EDIT");
+
+const [startFrameBrief, setStartFrameBrief] = useState("");
+const [endFrameBrief, setEndFrameBrief] = useState("");
+
+  const [tab, setTab] = useState<"IMAGE" | "VIDEO" | "EDIT">("IMAGE");
+  const [refImageName, setRefImageName] = useState("");
+const [refVideoName, setRefVideoName] = useState("");
+const [startImageName, setStartImageName] = useState("");
+const [endImageName, setEndImageName] = useState("");
+
+const [smartPrompt, setSmartPrompt] = useState<string>("");
+const [isSmartLoading, setIsSmartLoading] = useState(false);
+const [smartError, setSmartError] = useState<string>("");
+const [useSmart, setUseSmart] = useState(true);
+
+const [stylePreset, setStylePreset] = useState<
+  "CINEMATIC" | "PRODUCT" | "HORROR" | "ANIME" | "REALISTIC"
+>("CINEMATIC");
+
+const [aspect, setAspect] = useState<"16:9" | "9:16" | "1:1" | "4:5">("16:9");
+const [duration, setDuration] = useState<"6s" | "8s" | "10s" | "12s">("8s");
+
+const [camera, setCamera] = useState<"STATIC" | "HANDHELD" | "DOLLY" | "DRONE">(
+  "STATIC"
+);
+
+const settingsText = useMemo(() => {
+  const styleMap: Record<string, string> = {
+    CINEMATIC: "cinematic, dramatic lighting, filmic color grading",
+    REALISTIC: "photorealistic, natural lighting, true-to-life textures",
+    PRODUCT: "clean product shot, studio lighting, sharp details, minimal background",
+    HORROR: "horror atmosphere, eerie lighting, unsettling mood, high contrast",
+    ANIME: "anime style, clean linework, stylized shading, vibrant but controlled colors",
+  };
+
+  const camMap: Record<string, string> = {
+    STATIC: "static camera",
+    HANDHELD: "handheld camera, natural micro-shake",
+    DOLLY: "smooth dolly move",
+    DRONE: "smooth drone-like movement",
+  };
+
+  const parts: string[] = [];
+  parts.push(`STYLE: ${styleMap[stylePreset]}`);
+  parts.push(`ASPECT: ${aspect}`);
+
+  if (tab === "VIDEO") {
+    parts.push(`DURATION: ${duration}`);
+    parts.push(`CAMERA: ${camMap[camera]}`);
+  }
+
+  return parts.join("\n");
+}, [stylePreset, aspect, tab, duration, camera]);
+
+function resetAll() {
+  setBrief("");
+  setStartFrameBrief("");
+  setEndFrameBrief("");
+
+  setRefImageName("");
+  setRefVideoName("");
+  setStartImageName("");
+  setEndImageName("");
+
+  setSmartPrompt("");
+  setSmartError("");
+  setUseSmart(true);
+
+  // ayarlar (istersen bunları resetlemek yerine koruyabilirsin)
+  setStylePreset("CINEMATIC");
+  setAspect("16:9");
+  setDuration("8s");
+  setCamera("STATIC");
+
+  // modları varsayılana çek
+  setImageMode("TEXT");
+  setVideoMode("TEXT");
+  setEditMode("IMAGE_EDIT");
+}
+
+
+  const chosenTool = useMemo(() => pickTool(brief, tools as any), [brief]);
+
+const prompt = useMemo(() => {
+  // IMAGE TAB
+  if (tab === "IMAGE") {
+    // IMAGE / TEXT
+    if (imageMode === "TEXT") {
+      return `
+      ${settingsText}
+AMAÇ: Tek ve güçlü bir hero frame üretmek.
+
+PROMPT:
+${brief}
+
+CINEMATIC DETAILS:
+- high quality
+- realistic lighting
+- strong composition
+- cinematic color grading
+- no text, no logo, no watermark
+      `.trim();
+    }
+
+    // IMAGE / REFERENCE
+    return `
+    ${settingsText}
+AMAÇ: Referans görseli koruyarak kontrollü düzenleme.
+
+PROMPT:
+Using the uploaded reference image as the base, edit only the requested elements.
+
+REQUEST:
+${brief}
+
+RULES:
+- preserve subject identity
+- preserve camera angle and composition
+- realistic lighting and shadows
+- no text, no logo, no watermark
+    `.trim();
+  }
+
+  // VIDEO TAB
+  if (tab === "VIDEO") {
+    // VIDEO / START-END
+    if (videoMode === "START_END") {
+      return `
+      ${settingsText}
+START FRAME PROMPT:
+${startFrameBrief}
+
+END FRAME PROMPT:
+${endFrameBrief}
+
+VIDEO PROMPT:
+Create a smooth cinematic transition from the start frame to the end frame.
+- preserve character identity
+- natural motion
+- stable lighting
+- no flickering
+- no text, no logo
+      `.trim();
+    }
+
+    // VIDEO / TEXT
+    return `
+    ${settingsText}
+AMAÇ: Baştan sona sinematik bir video üretmek.
+
+VIDEO PROMPT:
+${brief}
+
+STYLE:
+- cinematic camera movement
+- realistic motion
+- consistent lighting
+- no text, no logo
+    `.trim();
+  }
+
+  // EDIT TAB
+  if (tab === "EDIT") {
+    if (editMode === "UPSCALE") {
+      return `
+      ${settingsText}
+AMAÇ: Görsel veya videonun kalitesini artırmak.
+
+UPSCALE PROMPT:
+Increase resolution while preserving details.
+- reduce noise
+- avoid oversharpening
+- keep natural textures
+      `.trim();
+    }
+
+    if (editMode === "VIDEO_EDIT") {
+      return `
+      ${settingsText}
+AMAÇ: Mevcut videoda kontrollü düzenleme.
+
+VIDEO EDIT PROMPT:
+${brief}
+
+RULES:
+- preserve original motion
+- maintain temporal consistency
+- no artifacts
+- no text, no logo
+      `.trim();
+    }
+
+    // IMAGE EDIT
+    return `
+    ${settingsText}
+AMAÇ: Seçili alanı düzenlemek (Inpaint / Relight / Swap).
+
+IMAGE EDIT PROMPT:
+${brief}
+
+RULES:
+- only modify selected area
+- preserve rest of the image
+- realistic reconstruction
+- no text, no logo
+    `.trim();
+  }
+
+  return "";
+}, [tab, imageMode, videoMode, editMode, brief, startFrameBrief, endFrameBrief]);
+
+const activePrompt = useMemo(() => {
+  if (useSmart && smartPrompt) return smartPrompt;
+  return prompt;
+}, [useSmart, smartPrompt, prompt]);
+
+const smartInput = useMemo(() => {
+  // Gemini’ye ham brief yerine, bağlamı olan bir talimat gönderiyoruz.
+  // Böylece tab/mode bilgisine göre doğru prompt formatını üretir.
+  const context = [
+    `SENARYO: Higgsfield için prompt engineer gibi davran.`,
+    `ÇIKTI: Sadece nihai promptu ver. Ek açıklama yazma.`,
+    ``,
+    `TAB: ${tab}`,
+    `IMAGE_MODE: ${imageMode}`,
+    `VIDEO_MODE: ${videoMode}`,
+    `EDIT_MODE: ${editMode}`,
+    ``,
+  ];
+
+context.push("");
+context.push("SETTINGS (MUTLAKA DİKKATE AL):");
+context.push(settingsText);
+
+  if (tab === "VIDEO" && videoMode === "START_END") {
+    context.push(`START_FRAME_BRIEF:\n${startFrameBrief || "(boş)"}`);
+    context.push(`END_FRAME_BRIEF:\n${endFrameBrief || "(boş)"}`);
+  } else {
+    context.push(`BRIEF:\n${brief || "(boş)"}`);
+  }
+
+  context.push("");
+  context.push("KALİTE KURALLARI:");
+  context.push("- cinematic, realistic, consistent");
+  context.push("- no text, no logo, no watermark");
+  context.push("- mümkünse madde madde değil; Higgsfield prompt gibi tek blok");
+  context.push("");
+context.push("OUTPUT TEMPLATE (MUTLAKA UY):");
+context.push("- Başlıklar kullan: TOOL, PROMPT");
+context.push("- Eğer TAB=VIDEO ve VIDEO_MODE=START_END ise ayrıca: START_PROMPT, END_PROMPT, VIDEO_PROMPT");
+context.push("- Prompt blokları kopyala-yapıştır hazır olsun.");
+context.push("- Kısa, net, üretime hazır dil.");
+context.push(`REF_IMAGE_FILE: ${refImageName || "(yok)"}`);
+context.push(`REF_VIDEO_FILE: ${refVideoName || "(yok)"}`);
+context.push(`START_IMAGE_FILE: ${startImageName || "(yok)"}`);
+context.push(`END_IMAGE_FILE: ${endImageName || "(yok)"}`);
+
+
+  return context.join("\n");
+}, [tab, imageMode, videoMode, editMode, brief, startFrameBrief, endFrameBrief]);
+
+  const [copied, setCopied] = useState(false);
+
+  const toolLinks: Record<string, string> = {
+  "Cinema Studio (Image) - Hero Frame": "https://higgsfield.ai/cinema-studio",
+  "Cinema Studio (Video)": "https://higgsfield.ai/cinema-studio",
+  "Start & End Frames → Video": "https://higgsfield.ai/cinema-studio",
+  "Edit Image (Inpaint/Relight/Swap)": "https://higgsfield.ai/edit",
+  "Edit Image (Inpaint)": "https://higgsfield.ai/edit?model=soul_inpaint",
+  "Relight": "https://higgsfield.ai/app/relight",
+  "Face Swap (Image)": "https://higgsfield.ai/app/face-swap",
+  "Character Swap (Image)": "https://higgsfield.ai/app/character-swap",
+  "Kling O1 Edit (Video)": "https://higgsfield.ai/video-edit",
+  "Kling O1 Edit / Recast / Video Face Swap": "https://higgsfield.ai/video-edit",
+  "Recast (Video Character Swap)": "https://higgsfield.ai/app/recast",
+  "Video Face Swap": "https://higgsfield.ai/app/video-face-swap",
+  "Upscale (Image/Video)": "https://higgsfield.ai/library/upscale",
+};
+
+
+  return (
+    <main className="min-h-screen px-6 py-8 bg-[var(--bg-main)]">
+      <div className="mx-auto max-w-5xl mb-4 flex gap-2">
+  {(["IMAGE", "VIDEO", "EDIT"] as const).map((t) => (
+    <button
+      key={t}
+      className={`rounded-xl px-4 py-2 border text-sm font-medium ${
+        tab === t ? "bg-black text-white" : "bg-white"
+      }`}
+      onClick={() => setTab(t)}
+    >
+      {t}
+    </button>
+  ))}
+</div>
+
+      <div className="mx-auto max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6">
+        <section className="rounded-2xl bg-[var(--bg-card)] border border-[var(--border-soft)] p-6 shadow-xl">
+          <h1 className="text-2xl font-semibold tracking-tight">
+  Higgsfield Promptor
+</h1>
+          <button
+  className="mt-3 w-full rounded-xl border py-2 text-sm font-medium"
+  onClick={resetAll}
+>
+  Reset (Tüm Alanları Temizle)
+</button>
+
+          <p className="text-sm opacity-70 mt-1">
+            İsteğini yaz → sistem uygun Edit aracını seçsin → promptu üret.
+          </p>
+<div className="mt-4 flex flex-wrap gap-2">
+  {tab === "IMAGE" && (
+    <>
+      <button
+        className={`rounded-xl px-3 py-2 border text-sm ${
+          imageMode === "TEXT" ? "bg-black text-white" : "bg-white"
+        }`}
+        onClick={() => setImageMode("TEXT")}
+      >
+        Sıfırdan (Metin)
+      </button>
+      <button
+        className={`rounded-xl px-3 py-2 border text-sm ${
+          imageMode === "REFERENCE" ? "bg-black text-white" : "bg-white"
+        }`}
+        onClick={() => setImageMode("REFERENCE")}
+      >
+        Referans Görselle
+      </button>
+    </>
+  )}
+
+  {tab === "VIDEO" && (
+    <>
+      <button
+        className={`rounded-xl px-3 py-2 border text-sm ${
+          videoMode === "TEXT" ? "bg-black text-white" : "bg-white"
+        }`}
+        onClick={() => setVideoMode("TEXT")}
+      >
+        Sıfırdan (Metin)
+      </button>
+      <button
+        className={`rounded-xl px-3 py-2 border text-sm ${
+          videoMode === "START_END" ? "bg-black text-white" : "bg-white"
+        }`}
+        onClick={() => setVideoMode("START_END")}
+      >
+        Start / End Frame
+      </button>
+    </>
+  )}
+
+  {tab === "EDIT" && (
+    <>
+      <button
+        className={`rounded-xl px-3 py-2 border text-sm ${
+          editMode === "IMAGE_EDIT" ? "bg-black text-white" : "bg-white"
+        }`}
+        onClick={() => setEditMode("IMAGE_EDIT")}
+      >
+        Image Edit
+      </button>
+      <button
+        className={`rounded-xl px-3 py-2 border text-sm ${
+          editMode === "VIDEO_EDIT" ? "bg-black text-white" : "bg-white"
+        }`}
+        onClick={() => setEditMode("VIDEO_EDIT")}
+      >
+        Video Edit
+      </button>
+      <button
+        className={`rounded-xl px-3 py-2 border text-sm ${
+          editMode === "UPSCALE" ? "bg-black text-white" : "bg-white"
+        }`}
+        onClick={() => setEditMode("UPSCALE")}
+      >
+        Upscale
+      </button>
+    </>
+  )}
+</div>
+{/* DOSYA YÜKLEME (Sadece seçiyoruz, analiz yok) */}
+<div className="mt-4 rounded-xl border p-3">
+  <div className="text-sm font-medium">Dosya Yükleme</div>
+  <div className="text-sm opacity-70 mt-1">
+    Bu sürümde dosyaları sadece seçiyoruz. Higgsfield’e yüklemeyi sen yapacaksın.
+  </div>
+
+  {/* IMAGE > Referans */}
+  {tab === "IMAGE" && imageMode === "REFERENCE" && (
+    <div className="mt-3">
+      <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)]">Referans Görsel</label>
+      <input
+        type="file"
+        accept="image/*"
+        className="mt-2 block w-full text-sm"
+        onChange={(e) => setRefImageName(e.target.files?.[0]?.name || "")}
+      />
+      {refImageName && (
+        <div className="mt-2 text-sm opacity-70">Seçilen: {refImageName}</div>
+      )}
+    </div>
+  )}
+
+  {/* VIDEO > Start/End */}
+  {tab === "VIDEO" && videoMode === "START_END" && (
+    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label className="block text-sm font-medium">Start Frame Görseli</label>
+        <input
+          type="file"
+          accept="image/*"
+          className="mt-2 block w-full text-sm"
+          onChange={(e) => setStartImageName(e.target.files?.[0]?.name || "")}
+        />
+        {startImageName && (
+          <div className="mt-2 text-sm opacity-70">Seçilen: {startImageName}</div>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium">End Frame Görseli</label>
+        <input
+          type="file"
+          accept="image/*"
+          className="mt-2 block w-full text-sm"
+          onChange={(e) => setEndImageName(e.target.files?.[0]?.name || "")}
+        />
+        {endImageName && (
+          <div className="mt-2 text-sm opacity-70">Seçilen: {endImageName}</div>
+        )}
+      </div>
+    </div>
+  )}
+
+  {/* EDIT > Image / Video */}
+  {tab === "EDIT" && (
+    <div className="mt-3">
+      <label className="block text-sm font-medium">
+        {editMode === "VIDEO_EDIT" ? "Düzenlenecek Video" : "Düzenlenecek Görsel"}
+      </label>
+      <input
+        type="file"
+        accept={editMode === "VIDEO_EDIT" ? "video/*" : "image/*"}
+        className="mt-2 block w-full text-sm"
+        onChange={(e) => {
+          const name = e.target.files?.[0]?.name || "";
+          if (editMode === "VIDEO_EDIT") setRefVideoName(name);
+          else setRefImageName(name);
+        }}
+      />
+      {(editMode === "VIDEO_EDIT" ? refVideoName : refImageName) && (
+        <div className="mt-2 text-sm opacity-70">
+          Seçilen: {editMode === "VIDEO_EDIT" ? refVideoName : refImageName}
+        </div>
+      )}
+    </div>
+  )}
+
+{/* ÜRETİM AYARLARI */}
+<div className="mt-4 rounded-xl border p-3">
+  <div className="text-sm font-medium">Üretim Ayarları</div>
+  <div className="text-sm opacity-70 mt-1">
+    Stil, oran ve video ayarları prompta otomatik eklenir.
+  </div>
+
+  {/* STYLE PRESET */}
+  <div className="mt-3">
+    <div className="text-sm font-medium">Stil</div>
+    <div className="mt-2 flex flex-wrap gap-2">
+      {(["CINEMATIC", "REALISTIC", "PRODUCT", "HORROR", "ANIME"] as const).map(
+        (s) => (
+          <button
+            key={s}
+            className={`rounded-xl px-3 py-2 border text-sm ${
+              stylePreset === s ? "bg-black text-white" : "bg-white"
+            }`}
+            onClick={() => setStylePreset(s)}
+          >
+            {s}
+          </button>
+        )
+      )}
+    </div>
+  </div>
+
+  {/* ASPECT */}
+  <div className="mt-4">
+    <div className="text-sm font-medium">Aspect Ratio</div>
+    <div className="mt-2 flex flex-wrap gap-2">
+      {(["16:9", "9:16", "1:1", "4:5"] as const).map((a) => (
+        <button
+          key={a}
+          className={`rounded-xl px-3 py-2 border text-sm ${
+            aspect === a ? "bg-black text-white" : "bg-white"
+          }`}
+          onClick={() => setAspect(a)}
+        >
+          {a}
+        </button>
+      ))}
+    </div>
+  </div>
+
+  {/* VIDEO SETTINGS (sadece video sekmesinde gösterelim) */}
+  {tab === "VIDEO" && (
+    <>
+      <div className="mt-4">
+        <div className="text-sm font-medium">Süre</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(["6s", "8s", "10s", "12s"] as const).map((d) => (
+            <button
+              key={d}
+              className={`rounded-xl px-3 py-2 border text-sm ${
+                duration === d ? "bg-black text-white" : "bg-white"
+              }`}
+              onClick={() => setDuration(d)}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="text-sm font-medium">Kamera</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {(["STATIC", "HANDHELD", "DOLLY", "DRONE"] as const).map((c) => (
+            <button
+              key={c}
+              className={`rounded-xl px-3 py-2 border text-sm ${
+                camera === c ? "bg-black text-white" : "bg-white"
+              }`}
+              onClick={() => setCamera(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
+  )}
+</div>
+
+
+</div>
+
+         {tab === "VIDEO" && videoMode === "START_END" ? (
+  <>
+    <label className="block text-sm font-medium mt-5">Start Frame (Görsel 1) Brief</label>
+    <textarea
+      className="mt-2 w-full rounded-xl border p-3 min-h-[120px]"
+      placeholder="Start frame nasıl görünsün? (ör: deri ceketli adam, yağmurlu sokak, gece, sinematik)"
+      value={startFrameBrief}
+      onChange={(e) => setStartFrameBrief(e.target.value)}
+    />
+
+    <label className="block text-sm font-medium mt-4">End Frame (Görsel 2) Brief</label>
+    <textarea
+      className="mt-2 w-full rounded-xl border p-3 min-h-[120px]"
+      placeholder="End frame nasıl görünsün? (ör: futbolcu forması, stadyum ışıkları, geniş açı)"
+      value={endFrameBrief}
+      onChange={(e) => setEndFrameBrief(e.target.value)}
+    />
+  </>
+) : (
+  <>
+    <label className="block text-sm font-medium mt-5">İstek / Brief</label>
+    <textarea
+      className="mt-2 w-full rounded-xl border p-3 min-h-[160px]"
+      placeholder="Örn: Arka plandaki yazıları sil, karakterler kalsın. Işık daha sinematik olsun."
+      value={brief}
+      onChange={(e) => setBrief(e.target.value)}
+    />
+  </>
+)}
+
+
+          <div className="mt-4 rounded-xl bg-black/5 p-3">
+            <div className="text-sm opacity-70">Önerilen araç</div>
+            <div className="text-base font-semibold">{chosenTool.tool_name}</div>
+            <div className="text-sm opacity-70 mt-1">
+              Kategori: {chosenTool.category}
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border p-5">
+          <div className="mb-3 rounded-xl bg-black/5 p-3">
+  <div className="text-sm opacity-70">Higgsfield önerisi</div>
+  {/* SEÇİM ÖZETİ */}
+<div className="mb-3 rounded-xl border p-3">
+  <div className="text-sm opacity-70">Seçim Özeti</div>
+
+  <div className="mt-2 text-sm">
+    <div><span className="font-medium">Tab:</span> {tab}</div>
+    <div>
+      <span className="font-medium">Mode:</span>{" "}
+      {tab === "IMAGE"
+        ? imageMode
+        : tab === "VIDEO"
+        ? videoMode
+        : editMode}
+    </div>
+    <div><span className="font-medium">Style:</span> {stylePreset}</div>
+    <div><span className="font-medium">Aspect:</span> {aspect}</div>
+    {tab === "VIDEO" && (
+      <>
+        <div><span className="font-medium">Duration:</span> {duration}</div>
+        <div><span className="font-medium">Camera:</span> {camera}</div>
+      </>
+    )}
+  </div>
+
+  <div className="mt-3 text-sm opacity-70 whitespace-pre-wrap">
+    {settingsText}
+  </div>
+</div>
+
+  <div className="text-base font-semibold">
+  <a
+    href={toolLinks[chosenTool.tool_name] || "https://higgsfield.ai/apps"}
+    target="_blank"
+    rel="noreferrer"
+    className="underline"
+  >
+    {chosenTool.tool_name}
+  </a>
+</div>
+
+  <div className="text-sm opacity-70 mt-1">
+    Uygulama: Higgsfield içinde bu aracı seç → dosyanı yükle → promptu yapıştır → üret.
+  </div>
+</div>
+
+          <h2 className="text-lg font-semibold">Prompt</h2>
+          {/* Kullanılacak Prompt Seçimi */}
+<div className="mt-3 rounded-xl border p-3">
+  <div className="text-sm font-medium">Kullanılan Prompt</div>
+
+  <div className="mt-2 flex gap-2">
+    <button
+      className={`rounded-xl px-3 py-2 border text-sm ${
+        !useSmart ? "bg-black text-white" : "bg-white"
+      }`}
+      onClick={() => setUseSmart(false)}
+    >
+      Normal
+    </button>
+
+    <button
+      className={`rounded-xl px-3 py-2 border text-sm ${
+        useSmart ? "bg-black text-white" : "bg-white"
+      }`}
+      onClick={() => setUseSmart(true)}
+      disabled={!smartPrompt}
+      title={!smartPrompt ? "Önce Akıllı Prompt üret" : ""}
+    >
+      Akıllı {smartPrompt ? "" : "(yok)"}
+    </button>
+  </div>
+
+  <div className="mt-2 text-sm opacity-70">
+    Şu an: <span className="font-medium">{useSmart && smartPrompt ? "Akıllı" : "Normal"}</span>
+  </div>
+</div>
+
+          <button
+  className="mt-3 w-full rounded-xl bg-black text-white py-3 font-medium disabled:opacity-50"
+  disabled={isSmartLoading}
+  onClick={async () => {
+    setSmartError("");
+    setIsSmartLoading(true);
+    try {
+      const res = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: smartInput }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSmartError(data?.error || "Bilinmeyen hata");
+        setSmartPrompt("");
+      } else {
+        setSmartPrompt(data.result);
+      }
+    } catch (e: any) {
+      setSmartError(String(e?.message || e));
+      setSmartPrompt("");
+    } finally {
+      setIsSmartLoading(false);
+    }
+  }}
+>
+  {isSmartLoading ? "Üretiliyor..." : "✨ Akıllı Prompt Üret (Gemini)"}
+</button>
+
+          <pre className="mt-3 whitespace-pre-wrap rounded-xl border p-3 text-sm leading-6 bg-white">
+            {prompt}
+          </pre>
+          {smartError && (
+  <div className="mt-3 rounded-xl border border-red-300 bg-red-50 p-3 text-sm">
+    <div className="font-medium">Gemini Hatası</div>
+    <div className="mt-1">{smartError}</div>
+  </div>
+)}
+
+{smartPrompt && (
+  <div className="mt-4">
+    <div className="text-sm font-semibold">Akıllı Prompt (Gemini)</div>
+    <pre className="mt-2 whitespace-pre-wrap rounded-xl border p-3 text-sm leading-6 bg-white">
+      {smartPrompt}
+    </pre>
+
+    <button
+      className="mt-3 w-full rounded-xl bg-black text-white py-3 font-medium"
+      onClick={async () => {
+        await navigator.clipboard.writeText(smartPrompt);
+      }}
+    >
+      Akıllı Prompt’u Kopyala
+    </button>
+  </div>
+)}
+
+
+          <button
+            className="mt-4 w-full rounded-xl bg-black text-white py-3 font-medium"
+            onClick={async () => {
+  await navigator.clipboard.writeText(activePrompt);
+  setCopied(true);
+  setTimeout(() => setCopied(false), 1200);
+}}
+
+          >
+            {copied ? "Kopyalandı ✅" : "Seçili Prompt’u Kopyala"}
+          </button>
+
+          <div className="mt-4 text-sm opacity-70">
+            Sonraki adım: Görsel/video yükleme + Start/End frame modları + LLM ile “kişiye özel prompt”.
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
